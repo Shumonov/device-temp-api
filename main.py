@@ -1,10 +1,21 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
+from flask_sqlalchemy import SQLAlchemy
 import time
+import os
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-errors = []
+
+class Error(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    data_string = db.Column(db.String, nullable=False)
+
+    def __repr__(self):
+        return '<Error %r>' % self.data_string
 
 
 def is_valid_timestamp(epoch_ms):
@@ -32,8 +43,10 @@ def temp_post():
         if temp_label != "'Temperature'" or not is_positive_int32(device_id) or not is_valid_timestamp(epoch_ms):
             raise ValueError()
     except:
-        errors.append(data)
-        return jsonify({"error": "bad request"}), 400
+        error = Error(data_string=data)
+        db.session.add(error)
+        db.session.commit()
+        return {"error": "bad request"}, 400
 
     # Check if temperature is at or over 90
     if temperature >= 90:
@@ -44,15 +57,20 @@ def temp_post():
 
 
 @app.route('/errors', methods=['GET'])
-def errors_get():
-    return jsonify({"errors": errors})
+def get_errors():
+    errors = Error.query.all()
+    return {"errors": [str(error.data_string) for error in errors]}
 
 
 @app.route('/errors', methods=['DELETE'])
-def errors_delete():
-    errors.clear()
-    return '', 204
+def delete_errors():
+    db.session.query(Error).delete()
+    db.session.commit()
+    return {"result": "all"}
 
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+with app.app_context():
+    db.create_all()
