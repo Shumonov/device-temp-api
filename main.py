@@ -1,15 +1,20 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
-import re
+import time
 
 app = Flask(__name__)
 
 errors = []
 
 
-@app.route('/')
-def home():
-    return "Hello, World!"
+def is_valid_timestamp(epoch_ms):
+    current_time_ms = int(time.time()) * 1000
+    print(f"Current time {current_time_ms}")
+    return 0 <= epoch_ms <= current_time_ms
+
+
+def is_positive_int32(n):
+    return 0 <= n <= 2147483647
 
 
 @app.route('/temp', methods=['POST'])
@@ -18,11 +23,13 @@ def temp_post():
 
     # Validate and parse the data string
     try:
+        parts = data.split(':')
+        print(f"PARTS: {parts}")
         device_id, epoch_ms, temp_label, temperature = data.split(':')
         device_id = int(device_id)
         epoch_ms = int(epoch_ms)
         temperature = float(temperature.strip("'"))
-        if temp_label != "'Temperature'":
+        if temp_label != "'Temperature'" or not is_positive_int32(device_id) or not is_valid_timestamp(epoch_ms):
             raise ValueError()
     except:
         errors.append(data)
