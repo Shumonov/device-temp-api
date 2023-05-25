@@ -6,7 +6,7 @@ import os
 
 app = Flask(__name__)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:Psql123456!@localhost/device_errors'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -32,25 +32,23 @@ def is_positive_int32(n):
 
 @app.route('/temp', methods=['POST'])
 def temp_post():
-    json_data = request.json.get('data')
-    if not json_data or 'data' not in json_data:
-        return jsonify({"error": "bad request"}), 400
+    data = request.json.get('data')
 
-    data_string = json_data['data']
     # Validate and parse the data string
     try:
-        parts = data_string.split(':')
+        parts = data.split(':')
         print(f"PARTS: {parts}")
-        device_id, epoch_ms, temp_label, temperature = data_string.split(':')
+        device_id, epoch_ms, temp_label, temperature = data.split(':')
         device_id = int(device_id)
         epoch_ms = int(epoch_ms)
         temperature = float(temperature.strip("'"))
         if temp_label != "'Temperature'" or not is_positive_int32(device_id) or not is_valid_timestamp(epoch_ms):
             raise ValueError()
     except:
-        new_error = Error(error_data=data_string)
+        new_error = Error(error_data=data)
         db.session.add(new_error)
         db.session.commit()
+        print("Crash 2")
         return jsonify({"error": "bad request"}), 400
 
     # Check if temperature is at or over 90
@@ -76,5 +74,7 @@ def delete_errors():
 
 
 if __name__ == '__main__':
-    db.create_all()
     app.run(debug=True)
+
+with app.app_context():
+    db.create_all()
