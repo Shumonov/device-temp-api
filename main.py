@@ -5,17 +5,19 @@ import time
 import os
 
 app = Flask(__name__)
+
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 
 
 class Error(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    data_string = db.Column(db.String, nullable=False)
+    error_data = db.Column(db.String, nullable=False)
 
     def __repr__(self):
-        return '<Error %r>' % self.data_string
+        return '<Error %r>' % self.error_data
 
 
 def is_valid_timestamp(epoch_ms):
@@ -30,23 +32,26 @@ def is_positive_int32(n):
 
 @app.route('/temp', methods=['POST'])
 def temp_post():
-    data = request.json.get('data')
+    json_data = request.json.get('data')
+    if not json_data or 'data' not in json_data:
+        return jsonify({"error": "bad request"}), 400
 
+    data_string = json_data['data']
     # Validate and parse the data string
     try:
-        parts = data.split(':')
+        parts = data_string.split(':')
         print(f"PARTS: {parts}")
-        device_id, epoch_ms, temp_label, temperature = data.split(':')
+        device_id, epoch_ms, temp_label, temperature = data_string.split(':')
         device_id = int(device_id)
         epoch_ms = int(epoch_ms)
         temperature = float(temperature.strip("'"))
         if temp_label != "'Temperature'" or not is_positive_int32(device_id) or not is_valid_timestamp(epoch_ms):
             raise ValueError()
     except:
-        error = Error(data_string=data)
-        db.session.add(error)
+        new_error = Error(error_data=data_string)
+        db.session.add(new_error)
         db.session.commit()
-        return {"error": "bad request"}, 400
+        return jsonify({"error": "bad request"}), 400
 
     # Check if temperature is at or over 90
     if temperature >= 90:
@@ -59,18 +64,17 @@ def temp_post():
 @app.route('/errors', methods=['GET'])
 def get_errors():
     errors = Error.query.all()
-    return {"errors": [str(error.data_string) for error in errors]}
+    error_data_strings = [error.error_data for error in errors]
+    return jsonify({"errors": error_data_strings})
 
 
 @app.route('/errors', methods=['DELETE'])
 def delete_errors():
     db.session.query(Error).delete()
     db.session.commit()
-    return {"result": "all"}
+    return jsonify({"status": "success"})
 
 
-if __name__ == "__main__":
-    app.run(debug=True)
-
-with app.app_context():
+if __name__ == '__main__':
     db.create_all()
+    app.run(debug=True)
