@@ -7,6 +7,11 @@ app = Flask(__name__)
 errors = []
 
 
+@app.route('/')
+def home():
+    return "Hello, World!"
+
+
 @app.route('/temp', methods=['POST'])
 def temp_post():
     data = request.json.get('data')
