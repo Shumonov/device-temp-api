@@ -1,33 +1,8 @@
-from flask import Flask, request, jsonify
+from app import app, db
+from flask import request, jsonify
 from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
-import time
-import os
-
-app = Flask(__name__)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DB_URL']
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-
-class Error(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    error_data = db.Column(db.String, nullable=False)
-
-    def __repr__(self):
-        return '<Error %r>' % self.error_data
-
-
-def is_valid_timestamp(epoch_ms):
-    current_time_ms = int(time.time()) * 1000
-    print(f"Current time {current_time_ms}")
-    return 0 <= epoch_ms <= current_time_ms
-
-
-def is_positive_int32(n):
-    return 0 <= n <= 2147483647
+from models import Error
+from validators import is_valid_timestamp, is_positive_int32, is_float64
 
 
 @app.route('/temp', methods=['POST'])
@@ -36,19 +11,17 @@ def temp_post():
 
     # Validate and parse the data string
     try:
-        parts = data.split(':')
-        print(f"PARTS: {parts}")
         device_id, epoch_ms, temp_label, temperature = data.split(':')
         device_id = int(device_id)
         epoch_ms = int(epoch_ms)
+        is_correct_format = temp_label == "'Temperature'" and is_positive_int32(device_id) and is_valid_timestamp(epoch_ms) and is_float64(temperature)
         temperature = float(temperature.strip("'"))
-        if temp_label != "'Temperature'" or not is_positive_int32(device_id) or not is_valid_timestamp(epoch_ms):
+        if not is_correct_format:
             raise ValueError()
     except:
         new_error = Error(error_data=data)
         db.session.add(new_error)
         db.session.commit()
-        print("Crash 2")
         return jsonify({"error": "bad request"}), 400
 
     # Check if temperature is at or over 90
@@ -71,10 +44,3 @@ def delete_errors():
     db.session.query(Error).delete()
     db.session.commit()
     return jsonify({"status": "success"})
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
-
-with app.app_context():
-    db.create_all()
